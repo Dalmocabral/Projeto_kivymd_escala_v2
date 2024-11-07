@@ -4,6 +4,8 @@ from kivymd.uix.button import MDFillRoundFlatIconButton
 from kivymd.uix.boxlayout import MDBoxLayout
 from kivymd.uix.textfield import MDTextField
 from kivymd.uix.selectioncontrol import MDCheckbox
+from kivymd.uix.scrollview import MDScrollView
+from kivymd.uix.list import OneLineListItem
 from kivy.uix.image import Image
 from kivy.uix.relativelayout import RelativeLayout
 from kivy.uix.floatlayout import FloatLayout
@@ -13,11 +15,10 @@ from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 from kivymd.uix.list import OneLineListItem, MDList
 from kivy.uix.label import Label
-from kivy.uix.checkbox import CheckBox
-from kivy.uix.button import Button
+from kivy.uix.widget import Widget
 from kivy.core.clipboard import Clipboard  # Importa o Clipboard
 from datetime import datetime
-
+from kivymd.uix.label import MDLabel
 # Configuração do banco de dados
 DATABASE_URL = "sqlite:///colaboradores.db"
 Base = declarative_base()
@@ -188,12 +189,14 @@ class ListaScreen(Screen):
         # Layout principal
         box_layout = MDBoxLayout(
             orientation="vertical",
-            padding=20,
-            spacing=20,
+            padding=[10, 20, 10, 10],  # Adiciona padding para melhorar o espaçamento
+            spacing=10,
         )
 
-        # Cria um MDList para exibir os colaboradores
+        # Envolva a lista de colaboradores em um ScrollView para rolagem
+        scroll_view = MDScrollView()
         self.lista_colaboradores = MDList()
+        scroll_view.add_widget(self.lista_colaboradores)
 
         # Botão para voltar à tela principal
         button_back = MDFillRoundFlatIconButton(
@@ -211,10 +214,12 @@ class ListaScreen(Screen):
             on_release=self.copy_to_clipboard
         )
 
-        # Adiciona a lista e os botões ao layout
-        box_layout.add_widget(self.lista_colaboradores)
+        # Adiciona o ScrollView (com a lista) e os botões ao layout
+        box_layout.add_widget(scroll_view)
         box_layout.add_widget(button_copy)  # Botão de copiar
         box_layout.add_widget(button_back)  # Botão de voltar
+
+        # Adiciona o layout principal à tela
         self.add_widget(box_layout)
 
     def on_pre_enter(self):
@@ -223,37 +228,47 @@ class ListaScreen(Screen):
     def carregar_colaboradores(self):
         # Limpa a lista atual antes de adicionar os colaboradores
         self.lista_colaboradores.clear_widgets()
-        
+
         # Recupera todos os colaboradores do banco de dados, com afastados no final
         colaboradores = session.query(User).order_by(User.afastado.asc(), User.dataDispensa.asc().nullsfirst()).all()
 
         # Organiza a lista para que afastados venham no final
         for idx, colaborador in enumerate(colaboradores, start=1):
-            user_box = MDBoxLayout(size_hint_y=None, height=50, spacing=10)
-            user_box.add_widget(Label(text=str(idx), size_hint_x=0.1))
-            user_box.add_widget(Label(text=colaborador.name, size_hint_x=0.3))
+            # Cria um layout horizontal para cada colaborador
+            user_box = MDBoxLayout(
+                orientation="horizontal",
+                size_hint_y=None, 
+                height=50, 
+                padding=[10, 0, 10, 0],
+                spacing=10
+            )
 
-            # Substitui o CheckBox pelo MDCheckbox
+            # Label com o nome do colaborador e índice
+            user_box.add_widget(MDLabel(text=f"{idx}. {colaborador.name}", size_hint_x=0.5))
+
+            # Checkbox para indicar se o colaborador está afastado
             afastado_checkbox = MDCheckbox(size_hint_x=0.1)
             afastado_checkbox.active = colaborador.afastado
             afastado_checkbox.bind(active=lambda checkbox, value, u=colaborador: self.set_afastado(u, value))
             user_box.add_widget(afastado_checkbox)
 
-            # Substitui o Button pelo MDFillRoundFlatIconButton
+            # Botão de dispensa
             dispensa_button = MDFillRoundFlatIconButton(
                 text="Dispensa",
                 on_release=lambda btn, u=colaborador: self.marcar_dispensa(u),
-                size_hint_x=0.2,
+                size_hint_x=0.3,
+                theme_text_color="Custom",
+                text_color=(1, 1, 1, 1),
+                md_bg_color=(0, 0.5, 0.8, 1)
             )
             user_box.add_widget(dispensa_button)
 
+            # Adiciona o layout do colaborador à lista
             self.lista_colaboradores.add_widget(user_box)
 
     def set_afastado(self, colaborador, value):
         colaborador.afastado = value
         session.commit()
-        
-        # Recarrega a lista após a alteração
         self.carregar_colaboradores()
 
     def marcar_dispensa(self, colaborador):
@@ -261,8 +276,8 @@ class ListaScreen(Screen):
         session.commit()
         self.carregar_colaboradores()
 
-    def copy_to_clipboard(self, instance):  # Adiciona um argumento para receber o evento
-        users = session.query(User).filter_by(afastado=False).all()  # Filtra apenas os não afastados
+    def copy_to_clipboard(self, instance):
+        users = session.query(User).filter_by(afastado=False).all()
         date_str = datetime.now().strftime('%d/%m/%Y')
         text = f'*DISPENSA ATUALIZADA* {date_str}\n\n'
         for idx, user in enumerate(users, start=1):
